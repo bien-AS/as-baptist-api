@@ -14,14 +14,36 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-ACTOR_ROLES = ("as_admin", "as_staff", "client_admin", "client_user", "system")
+SHARED_ENUMS = {
+    "data_source": (
+        "searchatlas",
+        "dataforseo",
+        "serper",
+        "brightlocal",
+        "synthetic",
+        "computed",
+        "client_verified",
+    ),
+    "listing_type": ("facility", "department", "practitioner"),
+    "fleet_kind": ("hospital", "clinic"),
+    "layer_type": ("map_pack", "local_finder", "organic", "ai_mode"),
+    "device_type": ("desktop", "mobile"),
+    "actor_role": ("as_admin", "as_staff", "client_admin", "client_user", "system"),
+    "lvi_band": ("elite", "healthy", "at-risk", "critical"),
+}
 
 
 def upgrade() -> None:
     op.execute("create extension if not exists pgcrypto")
     op.execute("create extension if not exists citext")
-    actor_role = postgresql.ENUM(*ACTOR_ROLES, name="actor_role", create_type=False)
-    actor_role.create(op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    for enum_name, enum_values in SHARED_ENUMS.items():
+        postgresql.ENUM(*enum_values, name=enum_name).create(bind, checkfirst=True)
+    actor_role = postgresql.ENUM(
+        *SHARED_ENUMS["actor_role"],
+        name="actor_role",
+        create_type=False,
+    )
 
     op.create_table(
         "tenant",
@@ -145,4 +167,5 @@ def downgrade() -> None:
     op.drop_table("membership")
     op.drop_table("user_profile")
     op.drop_table("tenant")
-    op.execute("drop type if exists actor_role")
+    for enum_name in reversed(tuple(SHARED_ENUMS)):
+        op.execute(f"drop type if exists {enum_name}")
