@@ -1,7 +1,13 @@
 """Problem response behavior at the HTTP boundary."""
 
 import httpx
+from app.core.errors import PROBLEM_DEFINITIONS
 from app.main import create_app
+from app.schemas import ProblemCode
+
+
+def test_problem_catalog_covers_every_contract_code() -> None:
+    assert set(PROBLEM_DEFINITIONS) == set(ProblemCode)
 
 
 async def test_unhandled_exception_is_safe_problem_response(

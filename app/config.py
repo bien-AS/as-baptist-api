@@ -2,11 +2,11 @@
 
 from enum import StrEnum
 from functools import lru_cache
-from typing import Self
+from typing import Annotated, Self
 from uuid import UUID
 
 from pydantic import field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 LOCAL_DATABASE_URL = "postgresql+asyncpg://app_api:change-me@localhost:5432/baptist"
 LOCAL_MIGRATIONS_DATABASE_URL = (
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     port: int = 8000
     database_url: str = LOCAL_DATABASE_URL
     migrations_database_url: str = LOCAL_MIGRATIONS_DATABASE_URL
-    cors_origins: tuple[str, ...] = ("http://localhost:5173",)
+    cors_origins: Annotated[tuple[str, ...], NoDecode] = ("http://localhost:5173",)
 
     auth_mode: AuthMode = AuthMode.mock
     supabase_jwks_url: str | None = None
@@ -81,17 +81,20 @@ class Settings(BaseSettings):
             return self
 
         missing: list[str] = []
-        if self.database_url == LOCAL_DATABASE_URL:
+        if not self.database_url.strip() or self.database_url == LOCAL_DATABASE_URL:
             missing.append("DATABASE_URL")
-        if self.migrations_database_url == LOCAL_MIGRATIONS_DATABASE_URL:
+        if (
+            not self.migrations_database_url.strip()
+            or self.migrations_database_url == LOCAL_MIGRATIONS_DATABASE_URL
+        ):
             missing.append("MIGRATIONS_DATABASE_URL")
         if self.auth_mode is AuthMode.mock:
             missing.append("AUTH_MODE=supabase")
-        if not self.supabase_jwks_url:
+        if not self.supabase_jwks_url or not self.supabase_jwks_url.strip():
             missing.append("SUPABASE_JWKS_URL")
-        if not self.supabase_jwt_audience:
+        if not self.supabase_jwt_audience or not self.supabase_jwt_audience.strip():
             missing.append("SUPABASE_JWT_AUDIENCE")
-        if not self.supabase_jwt_issuer:
+        if not self.supabase_jwt_issuer or not self.supabase_jwt_issuer.strip():
             missing.append("SUPABASE_JWT_ISSUER")
         if missing:
             joined = ", ".join(missing)
