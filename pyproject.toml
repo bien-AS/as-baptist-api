@@ -55,6 +55,9 @@ packages = ["app"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra"
+markers = [
+    "integration: tests that require a PostgreSQL instance and configured roles",
+]
 
 [tool.coverage.run]
 branch = true
