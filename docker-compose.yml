@@ -23,14 +23,18 @@ services:
     environment:
       APP_ENV: local
       AUTH_MODE: mock
-      DATABASE_URL: postgresql+asyncpg://app_api:local-api-password@db:5432/baptist
-      MIGRATIONS_DATABASE_URL: postgresql+asyncpg://app_migrator:local-migrator-password@db:5432/baptist
+      DATABASE_URL: postgresql+asyncpg://app_api:change-me@db:5432/baptist
+      MIGRATIONS_DATABASE_URL: postgresql+asyncpg://app_migrator:change-me@db:5432/baptist
       CORS_ORIGINS: http://localhost:5173
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+    command:
+      - sh
+      - -c
+      - python -m alembic upgrade head && exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 volumes:
   postgres_data:

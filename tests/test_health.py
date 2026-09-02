@@ -1,6 +1,8 @@
 """Public health and readiness behavior."""
 
 import httpx
+from app.main import create_app
+from app.routers.health import unavailable_readiness_probe
 
 
 async def test_health_is_unauthenticated_and_alive(client: httpx.AsyncClient) -> None:
@@ -11,10 +13,12 @@ async def test_health_is_unauthenticated_and_alive(client: httpx.AsyncClient) ->
     assert response.headers["x-request-id"]
 
 
-async def test_ready_returns_503_when_database_probe_is_unavailable(
-    client: httpx.AsyncClient,
-) -> None:
-    response = await client.get("/v1/ready")
+async def test_ready_returns_503_when_database_probe_is_unavailable() -> None:
+    application = create_app()
+    application.state.readiness_probe = unavailable_readiness_probe
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as test_client:
+        response = await test_client.get("/v1/ready")
 
     assert response.status_code == 503
     assert response.headers["content-type"] == "application/problem+json"
