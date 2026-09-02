@@ -7,6 +7,8 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 WORKDIR /build
 COPY pyproject.toml .
 COPY app ./app
+COPY alembic.ini .
+COPY migrations ./migrations
 
 RUN python -m pip install --upgrade pip \
     && python -m pip wheel --no-cache-dir --wheel-dir /wheels ".[production]"
@@ -22,6 +24,8 @@ RUN groupadd --system --gid 10001 app \
 
 WORKDIR /app
 COPY --from=builder /wheels /wheels
+COPY --from=builder /build/alembic.ini ./alembic.ini
+COPY --from=builder /build/migrations ./migrations
 RUN python -m pip install --no-cache-dir /wheels/*.whl \
     && rm -rf /wheels
 
