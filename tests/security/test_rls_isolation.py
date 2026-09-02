@@ -119,9 +119,9 @@ async def test_concurrent_sessions_keep_contexts_isolated(
 
 @pytest.mark.parametrize(
     "table_name",
-    tuple(table.name for table in Base.metadata.tables.values() if "tenant_id" in table.c),
+    tuple(table.name for table in Base.metadata.tables.values()),
 )
-async def test_every_direct_tenant_table_has_rls_forced(
+async def test_every_tenant_spine_table_has_rls_forced(
     db: AsyncSession,
     seed: Seed,
     table_name: str,

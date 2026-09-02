@@ -138,7 +138,147 @@ def upgrade() -> None:
         grant execute on function app.can_read_location(uuid) to app_api, app_worker, app_readonly;
         """
     )
+    op.execute(
+        """
+        alter table tenant enable row level security;
+        alter table tenant force row level security;
+        alter table user_profile enable row level security;
+        alter table user_profile force row level security;
+        alter table membership enable row level security;
+        alter table membership force row level security;
+        alter table membership_location enable row level security;
+        alter table membership_location force row level security;
+        alter table tenant_credential enable row level security;
+        alter table tenant_credential force row level security;
+
+        create policy tenant_context_select on tenant
+          for select to app_api, app_worker, app_readonly
+          using (id = app.current_tenant_id());
+
+        create policy user_profile_self on user_profile
+          for select to app_api
+          using (id = app.current_actor_id());
+
+        create policy membership_select_tenant on membership
+          for select to app_api, app_worker, app_readonly
+          using (tenant_id = app.current_tenant_id());
+        create policy membership_insert_tenant on membership
+          for insert to app_api, app_worker
+          with check (tenant_id = app.current_tenant_id());
+        create policy membership_update_tenant on membership
+          for update to app_api, app_worker
+          using (tenant_id = app.current_tenant_id())
+          with check (tenant_id = app.current_tenant_id());
+        create policy membership_delete_tenant on membership
+          for delete to app_api
+          using (tenant_id = app.current_tenant_id());
+
+        create policy membership_location_select on membership_location
+          for select to app_api, app_worker, app_readonly
+          using (exists (
+            select 1 from membership m
+            where m.id = membership_location.membership_id
+              and m.tenant_id = app.current_tenant_id()
+          ));
+        create policy membership_location_insert on membership_location
+          for insert to app_api, app_worker
+          with check (exists (
+            select 1 from membership m
+            where m.id = membership_location.membership_id
+              and m.tenant_id = app.current_tenant_id()
+          ));
+        create policy membership_location_update on membership_location
+          for update to app_api, app_worker
+          using (exists (
+            select 1 from membership m
+            where m.id = membership_location.membership_id
+              and m.tenant_id = app.current_tenant_id()
+          ))
+          with check (exists (
+            select 1 from membership m
+            where m.id = membership_location.membership_id
+              and m.tenant_id = app.current_tenant_id()
+          ));
+        create policy membership_location_delete on membership_location
+          for delete to app_api
+          using (exists (
+            select 1 from membership m
+            where m.id = membership_location.membership_id
+              and m.tenant_id = app.current_tenant_id()
+          ));
+
+        create policy tenant_credential_select_tenant on tenant_credential
+          for select to app_api, app_worker, app_readonly
+          using (tenant_id = app.current_tenant_id());
+        create policy tenant_credential_insert_tenant on tenant_credential
+          for insert to app_api, app_worker
+          with check (tenant_id = app.current_tenant_id());
+        create policy tenant_credential_update_tenant on tenant_credential
+          for update to app_api, app_worker
+          using (tenant_id = app.current_tenant_id())
+          with check (tenant_id = app.current_tenant_id());
+        create policy tenant_credential_delete_tenant on tenant_credential
+          for delete to app_api
+          using (tenant_id = app.current_tenant_id());
+
+        create trigger trg_membership_enforce_tenant
+          before insert or update on membership
+          for each row execute function app.tg_enforce_tenant();
+        create trigger trg_tenant_credential_enforce_tenant
+          before insert or update on tenant_credential
+          for each row execute function app.tg_enforce_tenant();
+
+        create trigger trg_tenant_updated_at
+          before update on tenant
+          for each row execute function app.tg_set_updated_at();
+        create trigger trg_user_profile_updated_at
+          before update on user_profile
+          for each row execute function app.tg_set_updated_at();
+        create trigger trg_membership_updated_at
+          before update on membership
+          for each row execute function app.tg_set_updated_at();
+        create trigger trg_tenant_credential_updated_at
+          before update on tenant_credential
+          for each row execute function app.tg_set_updated_at();
+        """
+    )
 
 
 def downgrade() -> None:
+    op.execute(
+        """
+        drop trigger if exists trg_membership_enforce_tenant on membership;
+        drop trigger if exists trg_tenant_credential_enforce_tenant on tenant_credential;
+        drop trigger if exists trg_tenant_updated_at on tenant;
+        drop trigger if exists trg_user_profile_updated_at on user_profile;
+        drop trigger if exists trg_membership_updated_at on membership;
+        drop trigger if exists trg_tenant_credential_updated_at on tenant_credential;
+
+        drop policy if exists tenant_context_select on tenant;
+        drop policy if exists user_profile_self on user_profile;
+        drop policy if exists membership_select_tenant on membership;
+        drop policy if exists membership_insert_tenant on membership;
+        drop policy if exists membership_update_tenant on membership;
+        drop policy if exists membership_delete_tenant on membership;
+        drop policy if exists membership_location_select on membership_location;
+        drop policy if exists membership_location_insert on membership_location;
+        drop policy if exists membership_location_update on membership_location;
+        drop policy if exists membership_location_delete on membership_location;
+        drop policy if exists tenant_credential_select_tenant on tenant_credential;
+        drop policy if exists tenant_credential_insert_tenant on tenant_credential;
+        drop policy if exists tenant_credential_update_tenant on tenant_credential;
+        drop policy if exists tenant_credential_delete_tenant on tenant_credential;
+
+        alter table tenant no force row level security;
+        alter table tenant disable row level security;
+        alter table user_profile no force row level security;
+        alter table user_profile disable row level security;
+        alter table membership no force row level security;
+        alter table membership disable row level security;
+        alter table membership_location no force row level security;
+        alter table membership_location disable row level security;
+        alter table tenant_credential no force row level security;
+        alter table tenant_credential disable row level security;
+        """
+    )
     op.execute("drop schema if exists app cascade")
