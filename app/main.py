@@ -17,8 +17,8 @@ from app.core.errors import (
 )
 from app.core.logging import bind_request, clear_request, configure_logging
 from app.core.security import TokenVerifier
+from app.db.session import DatabaseRuntime
 from app.routers.health import router as health_router
-from app.routers.health import unavailable_readiness_probe
 
 
 def _request_id(value: str | None) -> str:
@@ -32,16 +32,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     active_settings = settings or get_settings()
     logger = configure_logging(active_settings.log_level)
+    database = DatabaseRuntime(active_settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        yield
+        try:
+            yield
+        finally:
+            await database.dispose()
 
     app = FastAPI(title=active_settings.app_name, version="0.1.0", lifespan=lifespan)
     app.state.settings = active_settings
     app.state.logger = logger
     app.state.token_verifier = TokenVerifier(active_settings)
-    app.state.readiness_probe = unavailable_readiness_probe
+    app.state.database = database
+    app.state.readiness_probe = database.check_ready
 
     app.add_middleware(
         CORSMiddleware,
