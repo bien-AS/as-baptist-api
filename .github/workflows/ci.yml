@@ -16,9 +16,9 @@ jobs:
       AUTH_MODE: mock
       CORS_ORIGINS: http://localhost:5173
       DATABASE_URL: postgresql+asyncpg://app_api:change-me@127.0.0.1:5432/baptist
-      MIGRATIONS_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/baptist
+      MIGRATIONS_DATABASE_URL: postgresql+asyncpg://app_migrator:change-me@127.0.0.1:5432/baptist
       TEST_API_DATABASE_URL: postgresql+asyncpg://app_api:change-me@127.0.0.1:5432/baptist
-      TEST_MIGRATIONS_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/baptist
+      TEST_MIGRATIONS_DATABASE_URL: postgresql+asyncpg://app_migrator:change-me@127.0.0.1:5432/baptist
       TEST_WORKER_DATABASE_URL: postgresql+asyncpg://app_worker:change-me@127.0.0.1:5432/baptist
     services:
       postgres:
@@ -51,7 +51,7 @@ jobs:
           python -m pip install -e ".[dev]"
 
       - name: Lint
-        run: python -m ruff check app tests scripts
+        run: python -m ruff check app migrations tests scripts
 
       - name: Strict typecheck
         run: python -m mypy app
@@ -66,6 +66,9 @@ jobs:
           psql --host 127.0.0.1 --port 5432 --username postgres --dbname baptist <<'SQL'
           DO $$
           BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_migrator') THEN
+              CREATE ROLE app_migrator LOGIN PASSWORD 'change-me' SUPERUSER CREATEDB CREATEROLE NOINHERIT;
+            END IF;
             IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_api') THEN
               CREATE ROLE app_api LOGIN PASSWORD 'change-me' NOSUPERUSER NOBYPASSRLS NOINHERIT;
             END IF;
@@ -77,6 +80,7 @@ jobs:
             END IF;
           END
           $$;
+          ALTER ROLE app_migrator PASSWORD 'change-me' SUPERUSER CREATEDB CREATEROLE NOINHERIT;
           ALTER ROLE app_api PASSWORD 'change-me' NOSUPERUSER NOBYPASSRLS NOINHERIT;
           ALTER ROLE app_worker PASSWORD 'change-me' NOSUPERUSER NOBYPASSRLS NOINHERIT;
           ALTER ROLE app_readonly PASSWORD 'change-me' NOSUPERUSER NOBYPASSRLS NOINHERIT;
@@ -90,8 +94,8 @@ jobs:
 
       - name: Apply deterministic local seed
         env:
-          PGPASSWORD: postgres
-        run: psql --host 127.0.0.1 --port 5432 --username postgres --dbname baptist --file sql/seed/local.sql
+          PGPASSWORD: change-me
+        run: psql --host 127.0.0.1 --port 5432 --username app_migrator --dbname baptist --file sql/seed/local.sql
 
       - name: Test with coverage
         run: python -m pytest --cov=app --cov-report=term-missing --cov-fail-under=70

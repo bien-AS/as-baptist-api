@@ -47,7 +47,7 @@ the local migration command run during container startup. The seed data is
 deterministic and contains one local tenant plus test identities:
 
 ```text
-docker compose exec -T db psql -U postgres -d baptist < sql/seed/local.sql
+docker compose exec -T db psql -U app_migrator -d baptist < sql/seed/local.sql
 ```
 
 ## Configuration
@@ -102,6 +102,7 @@ and a production Docker build. The RLS suite was deliberately committed in
 two steps: `test(db): add red RLS isolation gate` followed by
 `fix(db): enforce RLS policies and pass isolation gate`.
 
-The current host does not include Docker Desktop or GNU Make, so the
-PostgreSQL integration suite and container build must run in CI or on a host
-with those prerequisites installed.
+Docker Desktop provides the fully local API and PostgreSQL stack. GNU Make is
+optional; the commands above can be run directly from the active virtual
+environment when it is unavailable. No Supabase service or cloud credentials
+are required for local development (`AUTH_MODE=mock`).

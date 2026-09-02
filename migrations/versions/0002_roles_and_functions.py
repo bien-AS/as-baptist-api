@@ -14,10 +14,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # asyncpg prepares each op.execute call, so every call below contains one
+    # PostgreSQL statement. PL/pgSQL bodies are single statements despite
+    # containing their own internal semicolons.
+    op.execute("create schema if not exists app")
     op.execute(
         """
-        create schema if not exists app;
-
         do $$
         begin
           if not exists (select from pg_roles where rolname = 'app_migrator') then
@@ -33,51 +35,71 @@ def upgrade() -> None:
             create role app_readonly noinherit login;
           end if;
         end
-        $$;
-
-        alter role app_api noinherit nosuperuser nobypassrls;
-        alter role app_worker noinherit nosuperuser nobypassrls;
-        alter role app_readonly noinherit nosuperuser nobypassrls;
-
-        revoke all on schema public from public;
-        grant usage on schema public to app_api, app_worker, app_readonly;
-
-        grant select, insert, update, delete
-          on tenant, user_profile, membership, membership_location, tenant_credential
-          to app_api;
-        grant select on all tables in schema public to app_worker, app_readonly;
-        revoke all on user_profile, membership, membership_location, tenant_credential
-          from app_worker;
-        grant select on all tables in schema public to app_readonly;
-
-        alter default privileges in schema public
-          grant select, insert, update, delete on tables to app_api;
-        alter default privileges in schema public
-          grant select on tables to app_worker, app_readonly;
+        $$
         """
     )
+    for statement in (
+        "alter role app_api noinherit nosuperuser nobypassrls",
+        "alter role app_worker noinherit nosuperuser nobypassrls",
+        "alter role app_readonly noinherit nosuperuser nobypassrls",
+        "revoke all on schema public from public",
+        "grant usage on schema public to app_api, app_worker, app_readonly",
+        """
+        grant select, insert, update, delete
+          on tenant, user_profile, membership, membership_location, tenant_credential
+          to app_api
+        """,
+        "grant select on all tables in schema public to app_worker, app_readonly",
+        """
+        revoke all on user_profile, membership, membership_location, tenant_credential
+          from app_worker
+        """,
+        "grant select on all tables in schema public to app_readonly",
+        """
+        alter default privileges in schema public
+          grant select, insert, update, delete on tables to app_api
+        """,
+        """
+        alter default privileges in schema public
+          grant select on tables to app_worker, app_readonly
+        """,
+    ):
+        op.execute(statement)
+
     op.execute(
         """
         create or replace function app.current_tenant_id() returns uuid
         language sql stable parallel safe as $$
           select nullif(current_setting('app.tenant_id', true), '')::uuid
-        $$;
-
+        $$
+        """
+    )
+    op.execute(
+        """
         create or replace function app.current_actor_id() returns uuid
         language sql stable parallel safe as $$
           select nullif(current_setting('app.actor_id', true), '')::uuid
-        $$;
-
+        $$
+        """
+    )
+    op.execute(
+        """
         create or replace function app.current_role() returns text
         language sql stable parallel safe as $$
           select coalesce(nullif(current_setting('app.role', true), ''), 'none')
-        $$;
-
+        $$
+        """
+    )
+    op.execute(
+        """
         create or replace function app.is_operator() returns boolean
         language sql stable parallel safe as $$
           select app.current_role() in ('as_admin', 'as_staff', 'system')
-        $$;
-
+        $$
+        """
+    )
+    op.execute(
+        """
         create or replace function app.can_read_location(loc uuid) returns boolean
         language sql stable as $$
           select
@@ -99,11 +121,17 @@ def upgrade() -> None:
                   and ml.location_id = loc
               )
             end
-        $$;
-
+        $$
+        """
+    )
+    op.execute(
+        """
         create or replace function app.tg_enforce_tenant() returns trigger
         language plpgsql as $$
         begin
+          if current_user = 'app_migrator' then
+            return new;
+          end if;
           if app.current_tenant_id() is null then
             raise exception 'no tenant bound: refusing write to %', tg_table_name
               using errcode = '42501';
@@ -121,73 +149,92 @@ def upgrade() -> None:
           end if;
           return new;
         end
-        $$;
-
+        $$
+        """
+    )
+    op.execute(
+        """
         create or replace function app.tg_set_updated_at() returns trigger
         language plpgsql as $$
         begin
           new.updated_at := now();
           return new;
         end
-        $$;
-
-        grant usage on schema app to app_api, app_worker, app_readonly;
-        grant execute on function app.current_tenant_id() to app_api, app_worker, app_readonly;
-        grant execute on function app.current_actor_id() to app_api, app_worker, app_readonly;
-        grant execute on function app.current_role() to app_api, app_worker, app_readonly;
-        grant execute on function app.is_operator() to app_api, app_worker, app_readonly;
-        grant execute on function app.can_read_location(uuid) to app_api, app_worker, app_readonly;
+        $$
         """
     )
-    op.execute(
-        """
-        alter table tenant enable row level security;
-        alter table tenant force row level security;
-        alter table user_profile enable row level security;
-        alter table user_profile force row level security;
-        alter table membership enable row level security;
-        alter table membership force row level security;
-        alter table membership_location enable row level security;
-        alter table membership_location force row level security;
-        alter table tenant_credential enable row level security;
-        alter table tenant_credential force row level security;
+    for statement in (
+        "grant usage on schema app to app_api, app_worker, app_readonly",
+        "grant execute on function app.current_tenant_id() to app_api, app_worker, app_readonly",
+        "grant execute on function app.current_actor_id() to app_api, app_worker, app_readonly",
+        "grant execute on function app.current_role() to app_api, app_worker, app_readonly",
+        "grant execute on function app.is_operator() to app_api, app_worker, app_readonly",
+        "grant execute on function app.can_read_location(uuid) "
+        "to app_api, app_worker, app_readonly",
+    ):
+        op.execute(statement)
 
+    for table in (
+        "tenant",
+        "user_profile",
+        "membership",
+        "membership_location",
+        "tenant_credential",
+    ):
+        op.execute(f"alter table {table} enable row level security")
+        op.execute(f"alter table {table} force row level security")
+
+    for statement in (
+        """
         create policy tenant_context_select on tenant
           for select to app_api, app_worker, app_readonly
-          using (id = app.current_tenant_id());
-
+          using (id = app.current_tenant_id())
+        """,
+        """
         create policy user_profile_self on user_profile
           for select to app_api
-          using (id = app.current_actor_id());
-
+          using (id = app.current_actor_id())
+        """,
+        """
         create policy membership_select_tenant on membership
           for select to app_api, app_worker, app_readonly
-          using (tenant_id = app.current_tenant_id());
+          using (tenant_id = app.current_tenant_id())
+        """,
+        """
         create policy membership_insert_tenant on membership
           for insert to app_api, app_worker
-          with check (tenant_id = app.current_tenant_id());
+          with check (tenant_id = app.current_tenant_id())
+        """,
+        """
         create policy membership_update_tenant on membership
           for update to app_api, app_worker
           using (tenant_id = app.current_tenant_id())
-          with check (tenant_id = app.current_tenant_id());
+          with check (tenant_id = app.current_tenant_id())
+        """,
+        """
         create policy membership_delete_tenant on membership
           for delete to app_api
-          using (tenant_id = app.current_tenant_id());
-
+          using (tenant_id = app.current_tenant_id())
+        """,
+        """
         create policy membership_location_select on membership_location
           for select to app_api, app_worker, app_readonly
           using (exists (
             select 1 from membership m
             where m.id = membership_location.membership_id
               and m.tenant_id = app.current_tenant_id()
-          ));
+          ))
+        """,
+        """
         create policy membership_location_insert on membership_location
           for insert to app_api, app_worker
           with check (exists (
             select 1 from membership m
             where m.id = membership_location.membership_id
               and m.tenant_id = app.current_tenant_id()
-          ));
+          ))
+        """,
+        """
         create policy membership_location_update on membership_location
           for update to app_api, app_worker
           using (exists (
@@ -199,87 +246,109 @@ def upgrade() -> None:
             select 1 from membership m
             where m.id = membership_location.membership_id
               and m.tenant_id = app.current_tenant_id()
-          ));
+          ))
+        """,
+        """
         create policy membership_location_delete on membership_location
           for delete to app_api
           using (exists (
             select 1 from membership m
             where m.id = membership_location.membership_id
               and m.tenant_id = app.current_tenant_id()
-          ));
-
+          ))
+        """,
+        """
         create policy tenant_credential_select_tenant on tenant_credential
           for select to app_api
-          using (tenant_id = app.current_tenant_id());
+          using (tenant_id = app.current_tenant_id())
+        """,
+        """
         create policy tenant_credential_insert_tenant on tenant_credential
           for insert to app_api, app_worker
-          with check (tenant_id = app.current_tenant_id());
+          with check (tenant_id = app.current_tenant_id())
+        """,
+        """
         create policy tenant_credential_update_tenant on tenant_credential
           for update to app_api, app_worker
           using (tenant_id = app.current_tenant_id())
-          with check (tenant_id = app.current_tenant_id());
+          with check (tenant_id = app.current_tenant_id())
+        """,
+        """
         create policy tenant_credential_delete_tenant on tenant_credential
           for delete to app_api
-          using (tenant_id = app.current_tenant_id());
+          using (tenant_id = app.current_tenant_id())
+        """,
+    ):
+        op.execute(statement)
 
+    for statement in (
+        """
         create trigger trg_membership_enforce_tenant
           before insert or update on membership
-          for each row execute function app.tg_enforce_tenant();
+          for each row execute function app.tg_enforce_tenant()
+        """,
+        """
         create trigger trg_tenant_credential_enforce_tenant
           before insert or update on tenant_credential
-          for each row execute function app.tg_enforce_tenant();
-
+          for each row execute function app.tg_enforce_tenant()
+        """,
+        """
         create trigger trg_tenant_updated_at
           before update on tenant
-          for each row execute function app.tg_set_updated_at();
+          for each row execute function app.tg_set_updated_at()
+        """,
+        """
         create trigger trg_user_profile_updated_at
           before update on user_profile
-          for each row execute function app.tg_set_updated_at();
+          for each row execute function app.tg_set_updated_at()
+        """,
+        """
         create trigger trg_membership_updated_at
           before update on membership
-          for each row execute function app.tg_set_updated_at();
+          for each row execute function app.tg_set_updated_at()
+        """,
+        """
         create trigger trg_tenant_credential_updated_at
           before update on tenant_credential
-          for each row execute function app.tg_set_updated_at();
-        """
-    )
+          for each row execute function app.tg_set_updated_at()
+        """,
+    ):
+        op.execute(statement)
 
 
 def downgrade() -> None:
-    op.execute(
-        """
-        drop trigger if exists trg_membership_enforce_tenant on membership;
-        drop trigger if exists trg_tenant_credential_enforce_tenant on tenant_credential;
-        drop trigger if exists trg_tenant_updated_at on tenant;
-        drop trigger if exists trg_user_profile_updated_at on user_profile;
-        drop trigger if exists trg_membership_updated_at on membership;
-        drop trigger if exists trg_tenant_credential_updated_at on tenant_credential;
+    for statement in (
+        "drop trigger if exists trg_membership_enforce_tenant on membership",
+        "drop trigger if exists trg_tenant_credential_enforce_tenant on tenant_credential",
+        "drop trigger if exists trg_tenant_updated_at on tenant",
+        "drop trigger if exists trg_user_profile_updated_at on user_profile",
+        "drop trigger if exists trg_membership_updated_at on membership",
+        "drop trigger if exists trg_tenant_credential_updated_at on tenant_credential",
+        "drop policy if exists tenant_context_select on tenant",
+        "drop policy if exists user_profile_self on user_profile",
+        "drop policy if exists membership_select_tenant on membership",
+        "drop policy if exists membership_insert_tenant on membership",
+        "drop policy if exists membership_update_tenant on membership",
+        "drop policy if exists membership_delete_tenant on membership",
+        "drop policy if exists membership_location_select on membership_location",
+        "drop policy if exists membership_location_insert on membership_location",
+        "drop policy if exists membership_location_update on membership_location",
+        "drop policy if exists membership_location_delete on membership_location",
+        "drop policy if exists tenant_credential_select_tenant on tenant_credential",
+        "drop policy if exists tenant_credential_insert_tenant on tenant_credential",
+        "drop policy if exists tenant_credential_update_tenant on tenant_credential",
+        "drop policy if exists tenant_credential_delete_tenant on tenant_credential",
+    ):
+        op.execute(statement)
 
-        drop policy if exists tenant_context_select on tenant;
-        drop policy if exists user_profile_self on user_profile;
-        drop policy if exists membership_select_tenant on membership;
-        drop policy if exists membership_insert_tenant on membership;
-        drop policy if exists membership_update_tenant on membership;
-        drop policy if exists membership_delete_tenant on membership;
-        drop policy if exists membership_location_select on membership_location;
-        drop policy if exists membership_location_insert on membership_location;
-        drop policy if exists membership_location_update on membership_location;
-        drop policy if exists membership_location_delete on membership_location;
-        drop policy if exists tenant_credential_select_tenant on tenant_credential;
-        drop policy if exists tenant_credential_insert_tenant on tenant_credential;
-        drop policy if exists tenant_credential_update_tenant on tenant_credential;
-        drop policy if exists tenant_credential_delete_tenant on tenant_credential;
+    for table in (
+        "tenant",
+        "user_profile",
+        "membership",
+        "membership_location",
+        "tenant_credential",
+    ):
+        op.execute(f"alter table {table} no force row level security")
+        op.execute(f"alter table {table} disable row level security")
 
-        alter table tenant no force row level security;
-        alter table tenant disable row level security;
-        alter table user_profile no force row level security;
-        alter table user_profile disable row level security;
-        alter table membership no force row level security;
-        alter table membership disable row level security;
-        alter table membership_location no force row level security;
-        alter table membership_location disable row level security;
-        alter table tenant_credential no force row level security;
-        alter table tenant_credential disable row level security;
-        """
-    )
     op.execute("drop schema if exists app cascade")

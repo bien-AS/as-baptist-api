@@ -87,7 +87,10 @@ async def test_context_settings_disappear_after_commit(db: AsyncSession, seed: S
                 )
             )
         ).one()
-    assert row == (None, None, None)
+    # PostgreSQL restores an unset custom GUC as an empty string on the same
+    # connection after SET LOCAL commits. The app.current_* functions use
+    # nullif/coalesce, so this is still an unbound context.
+    assert row == ("", "", "")
 
 
 async def test_concurrent_sessions_keep_contexts_isolated(

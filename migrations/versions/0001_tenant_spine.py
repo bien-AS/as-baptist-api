@@ -5,8 +5,8 @@ Revises:
 Create Date: 2026-09-03
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0001"
@@ -57,8 +57,18 @@ def upgrade() -> None:
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("tier", sa.Text(), server_default="agency_client", nullable=False),
         sa.Column("status", sa.Text(), server_default="active", nullable=False),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("archived_at", sa.TIMESTAMP(timezone=True)),
         sa.CheckConstraint(
             "tier in ('baptist','agency_client','retail_whitelabel')",
@@ -78,8 +88,18 @@ def upgrade() -> None:
         sa.Column("email", postgresql.CITEXT(), nullable=False),
         sa.Column("full_name", sa.Text()),
         sa.Column("avatar_url", sa.Text()),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("last_active_at", sa.TIMESTAMP(timezone=True)),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("email"),
@@ -101,8 +121,18 @@ def upgrade() -> None:
         sa.Column("invite_token", sa.Text()),
         sa.Column("invite_expires_at", sa.TIMESTAMP(timezone=True)),
         sa.Column("joined_at", sa.TIMESTAMP(timezone=True)),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint(
             "status in ('active','pending','revoked')",
             name="membership_status_check",
@@ -144,8 +174,18 @@ def upgrade() -> None:
         sa.Column("secret_ref", sa.Text(), nullable=False),
         sa.Column("oauth_expires_at", sa.TIMESTAMP(timezone=True)),
         sa.Column("status", sa.Text(), server_default="active", nullable=False),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint(
             "kind in ('api_key','basic','oauth')",
             name="tenant_credential_kind_check",
