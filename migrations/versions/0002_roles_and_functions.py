@@ -46,7 +46,8 @@ def upgrade() -> None:
           on tenant, user_profile, membership, membership_location, tenant_credential
           to app_api;
         grant select on all tables in schema public to app_worker, app_readonly;
-        revoke all on user_profile, membership, tenant_credential from app_worker;
+        revoke all on user_profile, membership, membership_location, tenant_credential
+          from app_worker;
         grant select on all tables in schema public to app_readonly;
 
         alter default privileges in schema public
@@ -208,7 +209,7 @@ def upgrade() -> None:
           ));
 
         create policy tenant_credential_select_tenant on tenant_credential
-          for select to app_api, app_worker, app_readonly
+          for select to app_api
           using (tenant_id = app.current_tenant_id());
         create policy tenant_credential_insert_tenant on tenant_credential
           for insert to app_api, app_worker
