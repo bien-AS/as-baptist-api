@@ -35,8 +35,15 @@ make typecheck  # strict mypy
 ```
 
 If GNU Make is unavailable, run the command after the `#` with the active
-virtual environment. Docker Desktop is required for the local PostgreSQL
-stack:
+virtual environment. For the recommended host-run development server with
+automatic reload, follow [docs/local-setup.md](docs/local-setup.md). It starts
+only PostgreSQL in Compose:
+
+```text
+docker compose -f docker-compose.local.yml up -d
+```
+
+The full containerized stack is also available when needed:
 
 ```text
 docker compose up --build

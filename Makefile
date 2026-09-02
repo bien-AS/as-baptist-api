@@ -15,7 +15,7 @@ migrate:
 	$(PYTHON) -m alembic upgrade head
 
 lint:
-	$(PYTHON) -m ruff check app tests
+	$(PYTHON) -m ruff check app migrations tests scripts
 
 typecheck:
 	$(PYTHON) -m mypy app
