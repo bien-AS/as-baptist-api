@@ -39,7 +39,7 @@ class AuthenticatedUser(BaseModel):
             raise ValueError("JWT subject is missing")
         tenant_claim = claims.get("tenant_id")
         tenant_id = UUID(tenant_claim) if isinstance(tenant_claim, str) else None
-        role = claims.get("role", "client_viewer")
+        role = claims.get("role", "client_user")
         if not isinstance(role, str):
             raise ValueError("JWT role is invalid")
         return cls(id=UUID(subject), tenant_id=tenant_id, role=role, claims=dict(claims))
