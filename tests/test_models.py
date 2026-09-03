@@ -12,6 +12,9 @@ def test_tenant_spine_tables_are_registered() -> None:
         "tenant_credential",
         "location",
         "location_alias",
+        "audit_card",
+        "cost_ledger",
+        "cost_budget",
     }
 
 
