@@ -15,6 +15,8 @@ def test_tenant_spine_tables_are_registered() -> None:
         "audit_card",
         "cost_ledger",
         "cost_budget",
+        "cost_preview",
+        "approval",
     }
 
 

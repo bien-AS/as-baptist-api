@@ -1,5 +1,6 @@
 """SQLAlchemy ORM models."""
 
+from app.models.approval import Approval, CostPreview
 from app.models.audit import AuditCard
 from app.models.base import Base
 from app.models.cost import CostBudget, CostLedger
@@ -16,10 +17,12 @@ from app.models.mixins import TenantMixin, TimestampMixin
 
 __all__ = [
     "ActorRole",
+    "Approval",
     "AuditCard",
     "Base",
     "CostBudget",
     "CostLedger",
+    "CostPreview",
     "Location",
     "LocationAlias",
     "Membership",
