@@ -19,6 +19,7 @@ from app.core.logging import bind_request, clear_request, configure_logging
 from app.core.security import TokenVerifier
 from app.db.session import DatabaseRuntime
 from app.routers.health import router as health_router
+from app.routers.identity import router as identity_router
 from app.routers.locations import router as locations_router
 
 
@@ -78,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.include_router(health_router)
+    app.include_router(identity_router)
     app.include_router(locations_router)
     return app
 
