@@ -10,6 +10,8 @@ def test_tenant_spine_tables_are_registered() -> None:
         "membership",
         "membership_location",
         "tenant_credential",
+        "location",
+        "location_alias",
     }
 
 

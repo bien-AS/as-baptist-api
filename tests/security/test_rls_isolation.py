@@ -177,6 +177,18 @@ async def test_scoped_member_sees_only_assigned_location(
     async with migrator_engine.begin() as connection:
         await connection.execute(
             text(
+                "insert into location "
+                "(id, tenant_id, slug, name, listing_type, facility_type, "
+                " address, city, state, zip, source) values "
+                "(:id_a, :tenant_id, 'alpha', 'Alpha', 'facility', 'hospital', "
+                " '1 Alpha Way', 'Memphis', 'TN', '38103', 'computed'), "
+                "(:id_b, :tenant_id, 'beta', 'Beta', 'facility', 'hospital', "
+                " '1 Beta Way', 'Memphis', 'TN', '38103', 'computed')"
+            ),
+            {"id_a": LOCATION_ALPHA, "id_b": LOCATION_BETA, "tenant_id": seed.tenant_a},
+        )
+        await connection.execute(
+            text(
                 "insert into membership_location (membership_id, location_id) "
                 "values (:membership_id, :location_id)"
             ),

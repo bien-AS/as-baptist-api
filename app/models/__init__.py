@@ -9,11 +9,14 @@ from app.models.identity import (
     TenantCredential,
     UserProfile,
 )
+from app.models.location import Location, LocationAlias
 from app.models.mixins import TenantMixin, TimestampMixin
 
 __all__ = [
     "ActorRole",
     "Base",
+    "Location",
+    "LocationAlias",
     "Membership",
     "MembershipLocation",
     "Tenant",

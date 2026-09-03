@@ -1,5 +1,6 @@
 """Shared transport models; domain contracts will be generated separately."""
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -68,3 +69,68 @@ class ReadyResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: Literal["ready"]
+
+
+class DataSource(StrEnum):
+    """Provenance catalog — mirrors the `data_source` Postgres enum (`03` §1)."""
+
+    SEARCHATLAS = "searchatlas"
+    DATAFORSEO = "dataforseo"
+    SERPER = "serper"
+    BRIGHTLOCAL = "brightlocal"
+    SYNTHETIC = "synthetic"
+    COMPUTED = "computed"
+    CLIENT_VERIFIED = "client_verified"
+
+
+class ResponseScope(BaseModel):
+    """The tenant/location a response is scoped to."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenant: str
+    location: str | None = None
+
+
+class ResponseMeta(BaseModel):
+    """Provenance envelope carried on every domain read (`05` §2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    generated_at: datetime
+    as_of: str | None = None
+    source: DataSource | Literal["mixed"]
+    sources: list[DataSource] | None = None
+    stale: bool = False
+    scope: ResponseScope
+
+
+class PageInfo(BaseModel):
+    """Offset pagination metadata for `Paginated[T]`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    limit: int
+    offset: int
+    total: int
+    has_more: bool
+
+
+class Envelope[T](BaseModel):
+    """The single-resource response wrapper — every 2xx body uses this or `Paginated`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: T
+    meta: ResponseMeta
+
+
+class Paginated[T](BaseModel):
+    """The collection response wrapper for offset-paginated domain reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[T]
+    page: PageInfo
+    meta: ResponseMeta
