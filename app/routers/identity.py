@@ -1,11 +1,12 @@
 """Identity HTTP routes (`05` §6.1, §8.2 S-03) — the first proof of the full seam."""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.envelope import build_meta
 from app.core.errors import ApiProblem
+from app.core.etag import compute_etag, matches
 from app.db.rls import RequestContext
 from app.deps import get_scoped_db, tenant_context_dependency
 from app.schemas import Envelope, ProblemCode
@@ -29,9 +30,10 @@ ME_QUERY = text(
 @router.get("/me", response_model=Envelope[MeResponse])
 async def get_me(
     request: Request,
+    response: Response,
     ctx: RequestContext = tenant_context_dependency,
     session: AsyncSession = scoped_db_dependency,
-) -> Envelope[MeResponse]:
+) -> Envelope[MeResponse] | Response:
     """`GET /v1/me` — JWT verify -> `tenant_context()` -> RLS-scoped read, in one call."""
 
     row = (
@@ -48,4 +50,8 @@ async def get_me(
         role=ctx.role,
         must_accept_invite=row.membership_status == "pending",
     )
+    etag = compute_etag(ctx, data.model_dump_json())
+    response.headers["ETag"] = etag
+    if matches(request.headers.get("if-none-match"), etag):
+        return Response(status_code=304, headers={"ETag": etag})
     return Envelope(data=data, meta=build_meta(request, ctx, source="computed"))

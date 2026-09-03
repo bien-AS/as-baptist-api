@@ -1,10 +1,11 @@
 """Location HTTP routes — validate, call the service, return (`01` §3)."""
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.envelope import build_meta, build_page
 from app.core.errors import ApiProblem
+from app.core.etag import compute_etag, matches
 from app.db.rls import RequestContext
 from app.deps import get_scoped_db, require_operator, tenant_context_dependency
 from app.repositories.location import LocationRepository
@@ -33,6 +34,7 @@ location_service_dependency = Depends(get_location_service)
 @router.get("", response_model=Paginated[LocationSummary])
 async def list_locations(
     request: Request,
+    response: Response,
     ctx: RequestContext = tenant_context_dependency,
     service: LocationService = location_service_dependency,
     fleet: str | None = Query(default=None),
@@ -40,7 +42,7 @@ async def list_locations(
     q: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
-) -> Paginated[LocationSummary]:
+) -> Paginated[LocationSummary] | Response:
     locations, total = await service.list_locations(
         limit=limit,
         offset=offset,
@@ -48,25 +50,36 @@ async def list_locations(
         status=status,
         q=q,
     )
-    return Paginated(
+    body = Paginated(
         data=[LocationSummary.from_model(location) for location in locations],
         page=build_page(limit=limit, offset=offset, total=total),
         meta=build_meta(request, ctx, source="computed"),
     )
+    etag = compute_etag(ctx, body.model_dump_json(exclude={"meta"}))
+    response.headers["ETag"] = etag
+    if matches(request.headers.get("if-none-match"), etag):
+        return Response(status_code=304, headers={"ETag": etag})
+    return body
 
 
 @router.get("/{slug}", response_model=Envelope[LocationDetail])
 async def get_location(
     slug: str,
     request: Request,
+    response: Response,
     ctx: RequestContext = tenant_context_dependency,
     service: LocationService = location_service_dependency,
-) -> Envelope[LocationDetail]:
+) -> Envelope[LocationDetail] | Response:
     location = await service.get_by_slug(slug)
     if location is None:
         raise ApiProblem.from_code(ProblemCode.NOT_FOUND)
+    data = LocationDetail.from_model(location)
+    etag = compute_etag(ctx, data.model_dump_json())
+    response.headers["ETag"] = etag
+    if matches(request.headers.get("if-none-match"), etag):
+        return Response(status_code=304, headers={"ETag": etag})
     return Envelope(
-        data=LocationDetail.from_model(location),
+        data=data,
         meta=build_meta(request, ctx, source=location.source, location=location.slug),
     )
 
