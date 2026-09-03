@@ -1,6 +1,7 @@
 """Cross-tenant isolation tests committed before policy enforcement."""
 
 import asyncio
+from uuid import UUID
 
 import pytest
 from app.db.rls import RequestContext, tenant_context
@@ -12,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from tests.security.conftest import Seed
 
 pytestmark = pytest.mark.integration
+
+LOCATION_ALPHA = UUID("00000000-0000-0000-0000-00000000003a")
+LOCATION_BETA = UUID("00000000-0000-0000-0000-00000000003b")
+CAN_READ_LOCATION_SQL = text("select app.can_read_location(:loc)")
 
 
 def context_for(seed: Seed, tenant: str = "a") -> RequestContext:
@@ -141,6 +146,50 @@ async def test_every_tenant_spine_table_has_rls_forced(
         ).one()
 
     assert enabled and forced, f"{table_name} is missing RLS enable/force"
+
+
+async def test_operator_can_read_any_location(db: AsyncSession, seed: Seed) -> None:
+    """`app.is_operator()` short-circuits location scoping regardless of assignment rows."""
+
+    async with tenant_context(db, context_for(seed)):
+        result = await db.execute(CAN_READ_LOCATION_SQL, {"loc": LOCATION_ALPHA})
+
+    assert result.scalar_one() is True
+
+
+async def test_unrestricted_member_can_read_any_location(db: AsyncSession, seed: Seed) -> None:
+    """No `membership_location` rows means "all locations in the tenant"."""
+
+    ctx = RequestContext(seed.tenant_a, seed.user_a, "client_user")
+    async with tenant_context(db, ctx):
+        result = await db.execute(CAN_READ_LOCATION_SQL, {"loc": LOCATION_ALPHA})
+
+    assert result.scalar_one() is True
+
+
+async def test_scoped_member_sees_only_assigned_location(
+    db: AsyncSession,
+    seed: Seed,
+    migrator_engine: AsyncEngine,
+) -> None:
+    """A `client_user` restricted to one location cannot read another."""
+
+    async with migrator_engine.begin() as connection:
+        await connection.execute(
+            text(
+                "insert into membership_location (membership_id, location_id) "
+                "values (:membership_id, :location_id)"
+            ),
+            {"membership_id": seed.membership_a, "location_id": LOCATION_ALPHA},
+        )
+
+    ctx = RequestContext(seed.tenant_a, seed.user_a, "client_user")
+    async with tenant_context(db, ctx):
+        allowed = await db.execute(CAN_READ_LOCATION_SQL, {"loc": LOCATION_ALPHA})
+        denied = await db.execute(CAN_READ_LOCATION_SQL, {"loc": LOCATION_BETA})
+
+    assert allowed.scalar_one() is True
+    assert denied.scalar_one() is False
 
 
 async def test_worker_cannot_read_identity_surface(
