@@ -12,7 +12,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     env:
-      APP_ENV: test
+      APP_ENV: local
       AUTH_MODE: mock
       CORS_ORIGINS: http://localhost:5173
       DATABASE_URL: postgresql+asyncpg://app_api:change-me@127.0.0.1:5432/baptist
